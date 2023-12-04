@@ -181,34 +181,6 @@ summary(duplicated(tree$tmt.obs.id))
 summary(duplicated(census_info$tmt.census.id))
 summary(duplicated(plot_info$tmt.plot.id))
 
-# ###### d. Spain update ----
-# datapath_NSP <- "/Users/suvantss/Documents/ForMMI/TMt_data_workshop/NSP_trouble_shooting/output/NSP/"
-# 
-# tree_NSP <- read.csv(paste0(datapath_NSP, "01_qc-treedata_TMt_NSP.csv"))
-# census_info_NSP <- read.csv(paste0(datapath_NSP, "03_census-info_TMt_NSP.csv"))
-# plot_info_NSP <- read.csv(paste0(datapath_NSP, "04_plot-info_TMt_NSP.csv"))
-# 
-# # harmonize columns
-# tree_NSP <- tree_NSP %>%
-#   mutate(biomass = NA,
-#          biomass.plot = NA,
-#          biomass.ha = NA,
-#          ba.ha = NA,
-#          mode.death = ifelse(mode.death == 3, 2, mode.death)) %>% # change to have code 3 defined as harvested
-#   select(any_of(colnames(tree)))
-# 
-# census_info_NSP <- census_info_NSP %>%
-#   select(any_of(colnames(census_info)))
-# 
-# plot_info_NSP <- plot_info_NSP %>%
-#   select(any_of(colnames(plot_info)))
-# 
-# # combine
-# tree <- rbind(tree, tree_NSP)
-# census_info <- rbind(census_info, census_info_NSP)
-# plot_info <- rbind(plot_info, plot_info_NSP)
-# 
-# table(tree$database.code)
 
 ###### e. Norway ----
 datapath_NOR <- "./data/raw/Norway/processed_susanne/"
@@ -280,66 +252,6 @@ round(prop.table(table(tree$database.code, tree$harvest.status), 1),2)
 dim(tree)
 
 rm(harvest_lst)
-
-# # NA check in harvest.status (for the latest census!)
-# # - NAs in FUN due to unexplained code 6 for Finland, but this not used
-# # - 2 trees in NNL had an NA in the original column with mode of death info
-# # - 3354 trees in NFL, 1422 trees in NSW and 12 trees in NSI were not included in the harvest
-# #   status df --> trees missing in the latter census and marked as dead?
-# 
-# table(tree$database.code, tree$harvest.status, useNA="always")
-# 
-# tree_check <- tree %>%
-#   left_join(plot_info %>% select(tmt.plot.id, country)) %>%
-#   group_by(database.code, country) %>%
-#   mutate(max.census = max(census.n),
-#          db_country = paste(database.code, country, sep="."))
-# 
-# with(tree_check %>% filter(tree.status == 1 & census.n == max.census),
-#      table(db_country, is.na(harvest.status)) )
-# 
-# with(tree_check %>% filter(tree.status == 1 & !is.na(in_harvestdf)),
-#      table(database.code, is.na(harvest.status)) )
-# 
-# tree_check %>% filter(tree.status == 1 & !is.na(in_harvestdf) &
-#                   is.na(harvest.status) & database.code == "NNL")
-# 
-# tree_check %>% filter(tree.status == 1 & # !is.na(in_harvestdf) &
-#                   is.na(harvest.status) & database.code == "NNL")
-# 
-# harvest_NNL <- read.csv("./data/processed/harvest_status//tree_harvest_status_NNL.csv")
-# harvest_NNL %>% filter(tmt.tree.id %in% c("NNL.58272_3", "NNL.59899_10"))
-# 
-# # sweden check
-# # (checks with the original data in ./data_exploration/swedish_data_update.R, end of file)
-# tree_checkSWE <- tree_check %>%
-#   filter(database.code == "NSW") %>%
-#   filter(census.n == 3 | (census.n == 2 & tree.status == 0))
-# 
-# tree_checkSWE %>%
-#   filter(is.na(harvest.status)) %>%
-#   # filter(plot.id == 831551312) %>%
-#   select(tmt.tree.id, tree.id)
-# 
-# tree_checkSWE %>%
-#   filter(census.n == 3) %>%
-#   group_by(tmt.plot.id, plot.id) %>%
-#   summarise(any_harvestNA = any(is.na(harvest.status)),
-#             any_harvestOK = any(!is.na(harvest.status)),
-#             n_harvestNA = sum(is.na(harvest.status)),
-#             n_harvestOK = sum(!is.na(harvest.status) ) ) %>%
-#   filter(any_harvestNA)  %>%
-#   arrange(desc(n_harvestNA))
-# 
-# tree_checkSWE %>%
-#   filter(census.n == 3) %>%
-#   group_by(tmt.plot.id, plot.id) %>%
-#   summarise(any_harvestNA = any(is.na(harvest.status)),
-#             any_harvestOK = any(!is.na(harvest.status)),
-#             n_harvestNA = sum(is.na(harvest.status)),
-#             n_harvestOK = sum(!is.na(harvest.status) ) ) %>%
-#   filter(any_harvestNA) %>%
-#   filter(plot.id %in% c(862533106, 831519406))
 
 ##### Check: trees without census info?
 
@@ -419,8 +331,6 @@ yrs_n <- census_info %>%
   group_by(db_country, census.n, year) %>%
   summarize(n = n())
 
-# yrs  %>% 
-#   as.data.frame()
 
 yrs %>% 
   arrange(country, database.code, desc(census.n)) %>%
@@ -617,13 +527,6 @@ census_stats_final <- census_stats_final %>%
            levels = c("NO_HARVEST", "PARTIAL_CUT", "ALL_CUT")) )
 
 
-# census_stats_final %>%
-#   mutate(all_stems_harvested = n_stems_obs.HARVEST == n_stems_obs0) %>%
-#   ggplot(aes(n_stems_obs0, n_stems_obs.HARVEST, col=all_stems_harvested)) +
-#   geom_point() + 
-#   geom_abline(slope=1, intercept = 0)
-
-
 ### Checks ----
 
 # tmt.census.id is NA? Mainly NNL, these seem to be plots that are not measured in
@@ -661,66 +564,6 @@ table(census_stats_final$database.code, is.na(census_stats_final$d_mean_ht) & !i
 census_stats_final %>%
   filter(is.na(d_mean_ht) & !is.na(n_stems_obs)) %>%
   select(tmt.census.id, d_mean_ht, n_stems_obs)
-
-# 206 NAs in census date?? -- all in NNL census 7, NAs already in the census_info table
-summary(is.na(census_info$census.date))
-
-table(census_info$database.code, is.na(census_info$census.date))
-
-summary(is.na(census_stats_final$census.date))
-with(census_stats_final[is.na(census_stats_final$census.date),],
-     table(database.code, census.n, useNA = "always"))  
-
-census_info %>%
-  filter(is.na(census.date)) %>%
-  select(tmt.plot.id, census.date) %>%
-  arrange(tmt.plot.id)
-
-tree %>%
-  filter(tmt.plot.id == "NNL.31710") %>%
-  with(table(census.n, tree.status))
-
-# census_stats_final %>%
-#   filter(tmt.plot.id == "NNL.31710") %>%
-#   select(tmt.plot.id, census.date)
-
-
-# ## Uncomment to check missing trees in latest census
-# table(tree0_status1$database.code, is.na(tree0_status1$tree.status1))
-# 
-# tree0_status1 %>% # NSI plots only ones that also have measured trees in the latest census
-#   group_by(database.code, tmt.census.id) %>%
-#   mutate(any_na = any(is.na(tree.status1))) %>%
-#   filter(any_na) %>%
-#   summarize(any_measured = any(!is.na(tree.status1))) %>%
-#   filter(any_measured) %>%
-#   with(table(database.code))
-# 
-# missing_census1 <- tree0_status1 %>%
-#   filter(is.na(tree.status1)) %>%
-#   mutate(census.n1 = census.n +1) %>%
-#   select(database.code, tmt.tree.id, census.n, census.n1, tree.status, tree.status1)
-# 
-# missing_census1 %>%
-#   filter(database.code == "NSI") %>%
-#   select(tmt.tree.id)
-
-# with(tree1, table(database.code, census.n))
-# 
-# check.tree.id <-"NNL.11137_17" #"NSI.119128.36015"  #"NSW.854589204.125106" # "NSW.832695312.283242" #
-# check.plot.id <- "NNL.11137" #"NSI.119128" # "NSW.854589204"
-# 
-# tree %>% filter(tmt.tree.id == check.tree.id) %>%  # check the tree
-#   select(tmt.tree.id, tmt.obs.id, tree.status)
-# 
-# tree %>% filter(tmt.plot.id == check.plot.id) %>% # check all trees in plot
-#   select(tmt.plot.id, tmt.tree.id, census.n, tree.status)
-# 
-# census_info %>% filter(tmt.plot.id == check.plot.id) # check census info
-
-# write.csv(missing_census1, file="./data/processed/check_lists/trees_missing_last_census.csv",
-#           row.names = FALSE)
-
 
 #proportion of harvested plots in all plots (latest census only)
 sum(census_stats_final$harvest_any, na.rm=TRUE) / nrow(census_stats_final)*100
@@ -930,7 +773,7 @@ dim(census_stats_final)
 ## - Add stand dynamics table
 ## - Check if harvest calculations match with stand dynamics table
 ##
-## Missing for Finland!
+## Missing for Finland! Not used in the final analysis!
 ##
 ################################################################'
 
