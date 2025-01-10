@@ -5,7 +5,7 @@
 ##
 ############################################################'
 
-# update 23-8-23
+# update 06-8-24, patch3
 
 rm(list=ls())
 
@@ -15,8 +15,8 @@ if(getwd() == bb_wrkdir) {
   library(Rcpp, lib="/rds/homes/s/suvantss/R/x86_64-pc-linux-gnu-library/4.1")
 }
 
-library(tidyverse)
 library(sf)
+library(tidyverse)
 library(mlr3verse)
 library(mlr3learners)
 library(mlr3extralearners)
@@ -43,31 +43,30 @@ varimp_to_df <- function(x, id) {
 
 # Set things & prepare --------------------------------------------------------------
 
-out_id <- "_patch1"
-run_subsets <- FALSE
+out_id <- "patch3"
 
 #these exclusion list just to calculate them in parallel runs 
 # (need to submit separate sbatch files, didn't write this into an array job...)
 exclude_cols <- c(
-  # "Dq_mean0",
-  # "ba0_m2",
-  # "gini_d_nplot0",
-  # "ba_percent_dom0",
-  # "species_classes2"
+  "Dq_mean0",
+  "ba0_m2",
+  "gini_d_nplot0",
+  "ba_percent_dom0",
+  "species_classes2"
+  ,
   
-  # ,
   "dist_barkbeetle_windthrow",
   "dist_fire",
   "access_1M",
   "access_50k",
   "POPDENS_2015_mean10km"
-  
-  ,
-  "elevation_1KMmd_GMTEDmd",
-  "roughness_1KMmd_GMTEDmd",
-  "npp",
-  "owner_share_public",
-  "country_or_region"
+  # ,
+  # 
+  # "elevation_1KMmd_GMTEDmd",
+  # "roughness_1KMmd_GMTEDmd",
+  # "npp",
+  # "owner_share_public",
+  # "country_or_region"
 )
 
 # 
@@ -82,8 +81,10 @@ out_dir <- paste0("./outputs/",
                   target_variable,
                   "/ml_interpretation/")
 
-run_cv <- FALSE
+run_subsets <- FALSE
 run_effects <- TRUE
+
+run_cv <- FALSE
 run_interactions <- FALSE
 
 
@@ -96,7 +97,7 @@ eff_method <- "pdp"
 
 # folder for input files
 input_dir <- paste0("./outputs/", target_variable, "/")
-run_details <- "-no_tuning-full-24-08-23"
+run_details <- "-no_tuning-full-newWeights_06-08-24"   # _30-07-24"   #"-no_tuning-full-24-08-23"
 
 input_fullmodel <-  paste0(input_dir, "RF-LOCALIMP-", target_variable, run_details, ".rds")
 input_taskdata <- paste0(input_dir, "TASKDATA-", target_variable, run_details, ".RData")    #"./outputs/harvest_3class/TASKDATA-harvest_3class-no_tuning-full-onlyTraits-10-02-22.RData"
@@ -107,16 +108,16 @@ input_CV_benchmark_scores <- paste0(input_dir, "RF-CV-benchmark-scores-", target
 
 if(!dir.exists(out_dir)) dir.create(out_dir)
 
-cv_pdf <- paste0(out_dir, "CV_results_", fl_date, out_id,".pdf")
+# cv_pdf <- paste0(out_dir, "CV_results_", fl_date, out_id,".pdf")
 varimp_pdf <- paste0(out_dir, "varimp_results_", fl_date, out_id,".pdf")
 eff_pdf <- paste0(out_dir, "effplot_results_", fl_date, out_id,".pdf")
 interaction_pdf <- paste0(out_dir, "interaction_results_", fl_date, out_id,".pdf")
-cv_benchmark_pdf <- paste0(out_dir, "CV_benchmark_results_", fl_date, out_id,".pdf")
+# cv_benchmark_pdf <- paste0(out_dir, "CV_benchmark_results_", fl_date, out_id,".pdf")
 
 
 localEff_pdf <- paste0(out_dir, "local_eff_", fl_date, out_id,".pdf")
 
-cv_df_file <- paste0(out_dir, "CV_results_", fl_date, out_id,".RData")
+# cv_df_file <- paste0(out_dir, "CV_results_", fl_date, out_id,".RData")
 varimp_df_file <- paste0(out_dir, "varimp_results_", fl_date, out_id,".RData")
 effects_list_file <- paste0(out_dir, "effects_results_", fl_date, out_id, ".RData")
 effects_subsetsD_file <- paste0(out_dir, "effects_subsetsD_", fl_date, out_id, ".RData")
@@ -132,31 +133,31 @@ rf_localimp <- readRDS(input_fullmodel)
 # -- data --
 load(input_taskdata)
 
-# -- CV results --
-if(run_cv) {
-  if(file.exists(input_CV)) load(input_CV) 
-  if(file.exists(input_CV_spatial)) load(input_CV_spatial)
-  if(file.exists(input_CV_country)) load(input_CV_country)
-}
+# # -- CV results --
+# if(run_cv) {
+#   if(file.exists(input_CV)) load(input_CV) 
+#   if(file.exists(input_CV_spatial)) load(input_CV_spatial)
+#   if(file.exists(input_CV_country)) load(input_CV_country)
+# }
 
-cv_bmscores <- read.csv(input_CV_benchmark_scores)
+# cv_bmscores <- read.csv(input_CV_benchmark_scores)
 
 # Feature importance  ----------------------------------------------------
 
-##### All, ranger ----
+# ##### All, ranger ----
 
 imp_df <- varimp_to_df(importance(rf_localimp), "all")
 
-gg_varimp <- ggplot(imp_df, aes(importance, reorder(variable, importance))) +
-  geom_point() +
-  geom_line(data = rbind(imp_df, imp_df %>% mutate(importance = 0)), 
-            aes(importance, variable, group=variable)) +
-  xlab("") + ylab("") +
-  ggtitle(paste0("Variable importance\n(", target_variable, ")")) +
-  theme_bw()
-
-pdf(file=localEff_pdf, height = 5, width = 6)
-gg_varimp
+# gg_varimp <- ggplot(imp_df, aes(importance, reorder(variable, importance))) +
+#   geom_point() +
+#   geom_line(data = rbind(imp_df, imp_df %>% mutate(importance = 0)),
+#             aes(importance, variable, group=variable)) +
+#   xlab("") + ylab("") +
+#   ggtitle(paste0("Variable importance\n(", target_variable, ")")) +
+#   theme_bw()
+# 
+# pdf(file=localEff_pdf, height = 5, width = 6)
+# gg_varimp
 
 
 # iml plots ---------------------------------------------------------------------

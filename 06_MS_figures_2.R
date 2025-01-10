@@ -41,8 +41,8 @@ outdir_name <- "update_EF"
 # outdir_name <- "noHuman_checks"
 
 run_details_1 <- "-no_tuning-full" 
-run_details_ID <- ""
-run_details_date <- "-24-08-23"
+run_details_ID <- "-newWeights_"
+run_details_date <- "06-08-24" #"30-07-24"
 run_details_full <- paste0(run_details_1, 
                            run_details_ID,
                            run_details_date)
@@ -54,28 +54,35 @@ run_details <- run_details_full
 input_dir <- paste0("./outputs/bluebear/", target_variable, "/")
 
 input_fullmodel1 <-  paste0(input_dir, "RF-LOCALIMP-", target_variable, run_details, ".rds")
-input_CV_benchmark_scores1 <- paste0(input_dir, "RF-CV-benchmark-scores-harvest01-no_tuning-full-noBalancingCV_23-11-23.csv")#"RF-CV-benchmark-scores-", target_variable, run_details, ".csv")
-# input_eff_1 <- paste0(input_dir, "ml_interpretation/effects_results_19-06-23.RData")
-input_eff_1 <- list.files(paste0(input_dir, "ml_interpretation/"), pattern="effects_results_24-08-23*",
+input_CV_benchmark_scores1 <- paste0(input_dir, "RF-CV-benchmark-scores-", target_variable, run_details, ".csv") # input_CV_benchmark_scores1 <- paste0(input_dir, "RF-CV-benchmark-scores-harvest01-no_tuning-full-noBalancingCV_23-11-23.csv")#"RF-CV-benchmark-scores-", target_variable, run_details, ".csv")
+
+input_eff_1 <- list.files(paste0(input_dir, "ml_interpretation/"), pattern="effects_results_06-08-24patch*",
                           full.names = TRUE)
-input_effD_1 <- paste0(input_dir, "ml_interpretation/effects_subsetsD_24-08-23_patch1.RData")
+
+input_effD_1 <- paste0(input_dir, "ml_interpretation/effects_subsetsD_06-08-24subsets.RData")
 
 taskdata_fl_1 <- paste0(input_dir, "/TASKDATA-", target_variable, run_details, ".RData")
+
+file.exists(c(input_fullmodel1, input_CV_benchmark_scores1, input_eff_1, input_effD_1, taskdata_fl_1))
 
 # RF2
 target_variable <- "harvest_percent_ba"
 run_details <- paste0(run_details_1, 
                       run_details_ID,
-                      "-24-08-23")
+                      "29-07-24")
+
 input_dir <- paste0("./outputs/bluebear/", target_variable, "/")
 
 input_fullmodel2 <-  paste0(input_dir, "RF-LOCALIMP-", target_variable, run_details, ".rds")
 input_CV_benchmark_scores2 <- paste0(input_dir, "RF-CV-benchmark-scores-", target_variable, run_details, ".csv")
-input_eff_2 <- c(paste0(input_dir, "ml_interpretation/effects_results_24-08-23.RData"),
-                 paste0(input_dir, "ml_interpretation/effects_results_26-08-23.RData"))
-input_effD_2 <- paste0(input_dir, "ml_interpretation/effects_subsetsD_24-08-23.RData")
+input_eff_2 <- paste0(input_dir, "ml_interpretation/effects_results_30-07-24.RData")
+  # c(paste0(input_dir, "ml_interpretation/effects_results_24-08-23.RData"),
+  #                paste0(input_dir, "ml_interpretation/effects_results_26-08-23.RData"))
+input_effD_2 <- paste0(input_dir, "ml_interpretation/effects_subsetsD_30-07-24.RData")
 
 taskdata_fl_2 <- paste0(input_dir, "/TASKDATA-", target_variable, run_details, ".RData")
+
+file.exists(input_fullmodel2, input_CV_benchmark_scores2, input_eff_2, input_effD_2, taskdata_fl_2)
 
 ## Output files -----------
 
@@ -112,7 +119,7 @@ if(length(input_eff_1 > 1)) {
   eff_others_1 <- out_lst$effects
 }
 
-load(input_effD_1)
+load(input_effD_1, verbose = TRUE)
 eff_D_1 <- eff_subsets
 
 if(length(input_eff_2) > 1) {
@@ -124,17 +131,17 @@ if(length(input_eff_2) > 1) {
   }
   eff_others_2 <- do.call(c, eff_lst)
 } else {
-  load(input_eff_2)
+  load(input_eff_2, verbose = TRUE)
   eff_others_2 <- out_lst$effects
 }
 
-load(input_effD_2)
+load(input_effD_2, verbose = TRUE)
 eff_D_2 <- eff_subsets
 
-load(taskdata_fl_1)
+load(taskdata_fl_1, verbose = TRUE)
 taskdata_1 <- task_data_sp
 
-load(taskdata_fl_2)
+load(taskdata_fl_2, verbose = TRUE)
 taskdata_2 <- task_data_sp
 
 # Cross-validation --------------------------------------------------------
@@ -152,12 +159,16 @@ cv_bmscores1 <- cv_bmscores1 %>%
     rf = "RF1 - Probability of harvest") %>%
   filter(CV_type != "Random")
 
-cv_bmscores1 %>% 
+cv_scoresummary_1 <- cv_bmscores1 %>% 
   group_by(resampling_id, Model) %>% 
   summarise(median_rocAuc = median(.vars1),
             median_prAuc = median(.vars2),
             mean_rocAuc = mean(.vars1),
-            mean_prAuc = mean(.vars2))
+            mean_prAuc = mean(.vars2)) #%>% as.data.frame()
+
+
+write_csv(cv_scoresummary_1, file=paste0("./outputs/cv_scoresummary_RFprobability_", fl_date, ".csv"))
+
 
 ## RF2 ----
 
@@ -172,13 +183,14 @@ cv_bmscores2 <- cv_bmscores2 %>%
     rf = "RF2 - Intensity of harvest") %>%
   filter(CV_type != "Random")
 
-cv_bmscores2 %>% 
+cv_scoresummary_2 <- cv_bmscores2 %>% 
   group_by(resampling_id, Model) %>% 
   summarise(median_Rsq = median(.vars1),
             median_RMSE = median(.vars2),
             mean_Rsq = mean(.vars1),
             mean_RMSE = mean(.vars2))
 
+write_csv(cv_scoresummary_2, file=paste0("./outputs/cv_scoresummary_RFintensity_", fl_date, ".csv"))
 
 ## plot MS figure ----
 
@@ -194,15 +206,17 @@ gg_cv_2 <- ggplot(cv_bmscores2, aes(CV_type, .vars2, col=Model)) +
   theme_classic() +
   ggtitle(expression("B. RF"[Intensity])) #("RF2 - Intensity of harvest")
 
-png(file= cv_png, width=9, height=3.5, unit="in", res=600)
+pdf(file= cv_pdf, width=12*0.393701, height=5*0.393701)
+# png(file= cv_png, width=12, height=5, unit="cm", res=300)
 gg_cv_roc1 + scale_color_brewer(palette="Paired") +
   gg_cv_2 + scale_color_brewer(palette="Paired") +
   plot_layout(ncol=2, 
               guides = "collect") & 
   theme(legend.position = 'right',
         # legend.title = element_blank(),
-        axis.text = element_text(size=12),
-        axis.title.y = element_text(size=12),
+        # axis.text = element_text(size=8),
+        # axis.title.y = element_text(size=10),
+        text = element_text(size = 8),
         axis.title.x = element_blank()) 
 dev.off()
 
@@ -511,9 +525,9 @@ eff_others[["country_or_region"]] <- eff_others[["country_or_region"]] %>%
   select(!country_or_region) %>%
   rename(country_or_region = country_or_region_code)
 
-eff_others[["ba0_m2"]] <- eff_BA_1 %>% 
-  filter(data == "Europe, all species") %>% 
-  select(ba0_m2, .class, .value, .type)
+# eff_others[["ba0_m2"]] <- eff_BA_1 %>% 
+#   filter(data == "Europe, all species") %>% 
+#   select(ba0_m2, .class, .value, .type)
 eff_others[["Dq_mean0"]] <- eff_D_1 %>%
   filter(data == "Europe, all sp.") %>% 
   select(Dq_mean0, .class, .value, .type)

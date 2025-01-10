@@ -17,9 +17,9 @@ library(tidyr)
 fl_date <-format(Sys.Date(), "%d-%m-%y")
 
 #input files
-input_fl_annual <- "./data/processed/data_annual_22-08-23.rds"
-input_fl_census <- "./data/processed/census_stats_final_22-08-23.rds"
-
+input_fl_annual <- "./data/processed/data_annual_24-05-24.rds"
+input_fl_census <- "./data/processed/census_stats_final_24-05-24.rds"
+sßß
 #output files
 
 out_annual <- paste0("./data/processed/data_annual_", fl_date, "_RFready.rds") # paste0(gsub(".rds", "", input_fl_annual), "_RFready.rds")
@@ -31,6 +31,30 @@ out_annual_weights <- paste0(gsub(".rds", "", input_fl_annual), "_weights_RFread
 data_annual <- readRDS(input_fl_annual)
 data_census <- readRDS(input_fl_census)
 
+# Fix the missing post-harvest edits --------------------------------------
+
+# check the forest structure predictors in the RF --> Dq_mean0 not updated post-harvest!
+
+forest_preds <- c("Dq_mean0",
+                  "ba0_m2",
+                  "gini_d_nplot0",
+                  "ba_percent_dom0", 
+                  "species_classes2")
+
+data_annual %>%
+  filter(tmt.plot.id == "FIN.0512010_9") %>%
+  select(any_of(c("tmt.plot.id", "census_interval", "ann.id", "harvest_any", forest_preds)))
+
+# Update Dq_mean0
+data_annual <- data_annual %>%
+  mutate(Dq_mean0 = ifelse(status != "post-harvest", Dq_mean0,
+                           ifelse(is.na(Dq_mean.NONHARVEST), 0, Dq_mean.NONHARVEST))
+  )
+
+# check changes
+data_annual %>%
+  filter(tmt.plot.id == "FIN.0512010_9") %>%
+  select(any_of(c("tmt.plot.id", "census_interval", "ann.id", "harvest_any", "Dq_mean0", "Dq_mean.NONHARVEST")))
 
 # Join raster extracted variables ------------------------------------------
 # from script 02b_extract_from_rasters.R
@@ -289,88 +313,6 @@ data_annual_out <- data_annual_out %>%
 
 summary(data_census_out$species_classes2)
 
-
-# Rep-forest-area for Sweden ----------------------------------------------
-# these are missing for some reason???
-
-swe_counties <- st_read("./data/raw/Sweden_lan_shp/alla_lan/alla_lan.shp")
-swe_forest_area <- read.csv("./data/raw/Sweden_lan_shp/forestarea_sweden_by_lan.csv")
-
-swe_counties <- swe_counties %>%
-  mutate(county_name = gsub("s län", replacement = "", x = LAN_NAMN),
-         county_name = gsub(" län", replacement = "", x = county_name)) %>%
-  st_transform(crs="EPSG:4326") %>%
-  left_join(swe_forest_area, by=c("county_name" = "Lan"))
-
-data_census_NSW <- data_census_out %>%
-  filter(database.code == "NSW") %>%
-  st_as_sf(coords = c("longitude", "latitude"), crs="EPSG:4326") %>%
-  st_join(swe_counties, join = st_nearest_feature) %>%
-  group_by(county_name, census.n) %>%
-  mutate(n_plots_county = n(),
-         forest_rep_area_NSW_county = Skogsmark_total / n_plots_county) %>%
-  group_by(region, census.n) %>%
-  mutate(n_plots_region = n(),
-         Skogsmark_region = sum(Skogsmark_total),
-         forest_rep_area_NSW_region = Skogsmark_region / n_plots_region) %>%
-  ungroup()
-  
-
-ggplot() + 
-  geom_sf(data = swe_counties, aes(fill=Skogsmark_total, col=factor(region))) #+
-  # geom_sf(data = data_census_NSW %>% slice_sample(n=1000), aes(col=forest_rep_area_NSW_region))
-
-
-data_census_out2 <- data_census_out %>%
-  left_join(data_census_NSW %>% 
-              select(tmt.census.id, forest_rep_area_NSW_county) %>%
-              st_drop_geometry() ) %>%
-  mutate(forest_area_rep_new = ifelse(database.code == "NSW", forest_rep_area_NSW_county, forest_area_rep))
-
-# data_census_out2 %>%
-#   slice_sample(n=1e4) %>%
-#   ggplot(aes(longitude, latitude, col=forest_area_rep)) +
-#   geom_point()
-# 
-# data_census_out2 %>%
-#   ggplot(aes(db_country, forest_area_rep_new)) +
-#   geom_violin(lwd=2)
-
-data_census_out <- data_census_out2
-
-data_annual_out <- data_annual_out %>%
-  left_join(data_census_out %>% select(tmt.census.id, forest_area_rep_new))
-
-summary(data_census_out$forest_area_rep_new)
-summary(data_annual_out$forest_area_rep_new)
-
-
-# # Remove POL from 11/8/2017 - NOT DOING THIS ANYMORE SINCE THE UPDATED DISTURBANCE DATA COVERS ALL YEARS!
-# # Big storm in Poland in 11-12 Aug 2017, not covered by Senf data (ends in 2016)
-# # --> remove data points with 2nd meas after storm from the RFs, at least until figured out how to deal with it
-# 
-# storm_date <- lubridate::decimal_date(as.Date("2017/08/11"))
-# data_census_out <- data_census_out %>%
-#   filter(country != "Poland" | (country == "Poland" & census.date < storm_date) )
-# data_annual_out <- data_annual_out %>%
-#   filter(country != "Poland" | (country == "Poland" & census.date < storm_date) )
-# 
-# # Update forest_rep_area by dividing the total forest area with the new number of plots in Poland
-# forestarea2015_poland <- read.csv("./data/raw/FORESTEUROPE2020/panEuropean-forestArea_forests_2015.csv", skip = 1) %>%
-#   filter(X == "Poland")
-# 
-# forest_rep_Poland <- (forestarea2015_poland$Area * 1000) / sum(data_census_out$country == "Poland")
-# 
-# unique(data_census_out$forest_area_rep_new[data_census_out$country == "Poland"]) # check old value
-# 
-# data_census_out <- data_census_out %>%
-#   mutate(forest_area_rep_new = ifelse(country == "Poland", forest_rep_Poland, forest_area_rep_new))
-# 
-# data_annual_out <- data_annual_out %>%
-#   mutate(forest_area_rep_new = ifelse(country == "Poland", forest_rep_Poland, forest_area_rep_new))
-# 
-# unique(data_census_out$forest_area_rep_new[data_census_out$country == "Poland"]) # check new value
-
 # Remove Canary Islands (no NPP or disturbance data) ----------------------
 data_census_out <- data_census_out %>% filter(latitude > 30)
 data_annual_out <- data_annual_out %>% filter(latitude > 30)
@@ -380,8 +322,8 @@ data_annual_out <- data_annual_out %>% filter(latitude > 30)
 #  - represented forest area
 #   (( - the annualization (for data_annual only) ))
 
-data_census_out$rep_area_weights <- data_census_out$forest_area_rep_new / sum(data_census_out$forest_area_rep_new) * nrow(data_census_out)
-data_annual_out$rep_area_weights <- data_annual_out$forest_area_rep_new / sum(data_annual_out$forest_area_rep_new) * nrow(data_annual_out)
+data_census_out$rep_area_weights <- data_census_out$forest_area_rep / sum(data_census_out$forest_area_rep) * nrow(data_census_out)
+data_annual_out$rep_area_weights <- data_annual_out$forest_area_rep / sum(data_annual_out$forest_area_rep) * nrow(data_annual_out)
 
 ## data_annual to weights ----
 
@@ -394,7 +336,7 @@ data_annual_weights <- data_annual_out %>%
   distinct() %>%
   ungroup()
 
-data_annual_weights$rep_area_weights <- (data_annual_weights$n_annual * data_annual_weights$forest_area_rep_new) / sum(data_annual_weights$forest_area_rep_new) * nrow(data_annual_weights)
+data_annual_weights$rep_area_weights <- (data_annual_weights$n_annual * data_annual_weights$forest_area_rep) / sum(data_annual_weights$forest_area_rep) * nrow(data_annual_weights)
 
 dim(data_annual_weights)
 
@@ -452,7 +394,27 @@ soceco %>%
   mutate(total_ha = sum(value),
          share = value / total_ha) %>%
   ggplot(aes(year, share ,group=country, col = country, lty = country)) + geom_point() + geom_line() +
-  facet_wrap(ownertype~.) 
+  facet_wrap(ownertype~.) +
+  theme_bw() + 
+  theme(legend.position = "bottom")
+ggsave("./outputs/figures/ownership_change_country.pdf")
+
+soceco %>%
+  filter(type_unit == "Area" & size == "Total") %>%
+  group_by(country, year) %>%
+  mutate(total_ha = sum(value, na.rm = TRUE),
+         share = value / total_ha) %>%
+  filter(ownertype == "Public") %>%
+  ggplot(aes(year, share ,group=country, col = country, lty = country)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Public ownership of forest area (%)") +
+  theme_bw() + 
+  theme(legend.position = "bottom",
+        legend.title = element_blank())
+ggsave("./outputs/figures/public_ownership_change_country.pdf",
+       width= 5.5, height = 5)
+
 
 # Info from Switzerland and Spain missing to make a variable out of this (for Area more countries missing)
 soceco %>%
@@ -471,8 +433,9 @@ public_share <- soceco %>%
   arrange(country, desc(year) ) %>%
   group_by(country) %>%
   filter(row_number() == 1) %>%
-  rename(owner_share_public = share) %>%
-  select(country, owner_share_public)
+  rename(owner_share_public = share,
+         owner_share_public_year = year) %>%
+  select(country, owner_share_public, owner_share_public_year)
   
 
 data_census_out <- data_census_out %>%

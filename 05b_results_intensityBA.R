@@ -5,7 +5,7 @@
 ##
 ############################################################'
 
-# update 24-8-23
+# update 30-7-24
 
 rm(list=ls())
 
@@ -55,7 +55,7 @@ out_dir <- paste0("./outputs/",
 run_cv <- FALSE
 run_effects <- TRUE
 run_interactions <- FALSE
-run_subsets <- FALSE
+run_subsets <- TRUE
 
 subset_iml_effects <- 5e4 # NULL if run with full data, otherwise numeric giving the size of subsample
 
@@ -64,7 +64,7 @@ eff_method <- "pdp"
 
 # folder for input files
 input_dir <- paste0("./outputs/", target_variable, "/")
-run_details <- "-no_tuning-full-24-08-23"
+run_details <- "-no_tuning-full-newWeights_29-07-24"    #"-no_tuning-full-24-08-23"
 
 # input file names
 input_fullmodel <-  paste0(input_dir, "RF-LOCALIMP-", target_variable, run_details, ".rds")
@@ -333,8 +333,9 @@ if(run_subsets) {
 
 ## Full data ----
 
-# run only ba here, not run in the prev round...
-pred_names <- "ba0_m2" # setdiff(predictor_names, c("Dq_mean0"))
+# run all
+pred_names <- predictor_names # "ba0_m2" # setdiff(predictor_names, c("Dq_mean0"))
+print(pred_names)
 
 iml_list_effects <- calculate_iml(model_iml = rf_localimp,
                                   data_iml = data_iml,
@@ -364,80 +365,4 @@ wrap_plots(eff_plot_lst, ncol=3) &
   theme(axis.text.x = element_text(angle=45, hjust=1),
         axis.title.x = element_blank())
 dev.off()
-
-# OLD STUFF ?? ####### ---------------------------------
-# 
-# #effects
-# iml_list_effects <- calculate_iml(model_iml = rf_localimp,
-#                           data_iml = data_iml,
-#                           target_variable = target_variable,
-#                           predictor_names = predictor_names,
-#                           run_effects = run_effects,
-#                           run_interactions = FALSE,
-#                           save_to_file = effects_list_file)
-# 
-# # save effects-list to file
-# save(iml_list_effects, file=effects_list_file)
-# 
-# # plot effects
-# df_values <- do.call(rbind, lapply(map(iml_list_effects$effects, "results"), select, .value))
-# y_limits <- df_values %>% 
-#   summarize(minVal = min(.value),
-#             maxVal = max(.value))
-# eff_plot_lst <- lapply(iml_list_effects$effects, function(x) plot(x) + 
-#                          ylim(c(0, y_limits$maxVal)) +
-#                          theme(axis.text.x = element_text(angle=25, hjust=1, size=6))  )
-# 
-# pdf(file=eff_pdf)
-# wrap_plots(eff_plot_lst, ncol=3)
-# 
-# wrap_plots(lapply(iml_list_interactions$effects_2feature, plot_effect2), ncol=2)
-# 
-# dev.off()
-# 
-# # interactions
-# iml_list_interactions <- calculate_iml(model_iml = rf_localimp,
-#                           data_iml = data_iml,
-#                           target_variable = target_variable,
-#                           predictor_names = predictor_names,
-#                           run_effects = FALSE,
-#                           run_interactions = run_interactions,
-#                           save_to_file = interactions_list_file,
-#                           interaction_vars = c("SDI0", "Dq_mean0"))
-# 
-# 
-# if(run_interactions) {
-#   # save effects-list to file
-#   save(iml_list_interactions, file=interactions_list_file)
-#   
-#   # plot interactions
-#   pdf(file=interaction_pdf, width=7, height=6)
-#   plot_interaction(iml_list_interactions$interactions$all_features) +
-#     ggtitle("All features, strength of interactions")
-#   
-#   wrap_plots(lapply(iml_list_interactions$interactions$individual_features, plot), ncol=1)
-#   
-#   dev.off()
-# } 
-
-# Predictions vs observations ---------------------------------------------
-# 
-# preds <- predict(rf_localimp, data=task_data_sp)
-# 
-# df_preds <- data.frame(observed_intensity = task_data_sp$harvest_percent_ba,
-#                        predicted_intensity = preds$predictions)
-# 
-# gg1 <- ggplot(df_preds, aes(observed_intensity, predicted_intensity)) +
-#   geom_abline(intercept = 0, slope=1, col=2, lwd=1) +
-#   geom_point(size=1) +
-#   geom_smooth(method = "lm", lty=2, se=FALSE) 
-# 
-# gg2 <- ggplot(df_preds %>% filter(observed_intensity == 1),
-#        aes(predicted_intensity)) +
-#   geom_density(fill="gray50", alpha=.5) +
-#   xlab("Predicted intensity, when observed = 1")
-# 
-# pdf(file = pred_vs_obs_pdf)
-# gg1 + gg2
-# dev.off()
 

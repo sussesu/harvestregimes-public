@@ -25,7 +25,7 @@ load("./outputs/basemaps_europe.RData")
 ## Run for a subset of tree data only?
 run_subset <- FALSE
 
-## run native species part?
+## run native species part? (this switch not functional, code removed from the cleaned version of script)
 run_nativesp <- FALSE
 
 ## exclude data sets, give db_country (database.code + . + 3-letters of country)
@@ -153,12 +153,6 @@ tree_fin <- read.csv("./data/raw/VMI/TMt_format/01_qc-treedata_TMt_FIN_18-03-22.
 census_info_fin <- read.csv("./data/raw/VMI/TMt_format/03_census-info_TMt_FIN_18-03-22.csv")
 plot_info_fin <- read.csv("./data/raw/VMI/TMt_format/04_plot-info_TMt_FIN_18-03-22.csv")
 
-# colnames(tree_fin)
-
-# setdiff(colnames(tree), colnames(tree_fin))
-# setdiff(colnames(census_info), colnames(census_info_fin))
-# setdiff(colnames(plot_info), colnames(plot_info_fin))
-
 tree_fin <- tree_fin %>%
   mutate(biomass = NA,
          biomass.plot = NA,
@@ -180,7 +174,6 @@ plot_info <- rbind(plot_info, plot_info_fin)
 summary(duplicated(tree$tmt.obs.id))
 summary(duplicated(census_info$tmt.census.id))
 summary(duplicated(plot_info$tmt.plot.id))
-
 
 ###### e. Norway ----
 datapath_NOR <- "./data/raw/Norway/processed_susanne/"
@@ -204,7 +197,6 @@ table(tree$database.code)
 rm(tree_NOR, census_info_NOR, plot_info_NOR,
    tree_NSW, census_info_NSW, plot_info_NSW,
    tree_NPO, census_info_NPO, plot_info_NPO,
-   # tree_NSP, census_info_NSP, plot_info_NSP,
    tree_fin, census_info_fin, plot_info_fin)
 
 
@@ -252,6 +244,7 @@ round(prop.table(table(tree$database.code, tree$harvest.status), 1),2)
 dim(tree)
 
 rm(harvest_lst)
+
 
 ##### Check: trees without census info?
 
@@ -317,10 +310,7 @@ yrs <- census_info %>%
   filter(!db_country %in% exclude_db) %>%
   group_by(database.code, country, census.n) %>%
   summarize(min.date = floor(min(census.date, na.rm=TRUE)),
-            max.date = floor(max(census.date, na.rm=TRUE))) # %>%
-  # filter(db_country %in% c("NSW.Sweden", "NSI.Switzerland", "NPO.Poland",
-  #                          "NNL.Netherlands", "NFG.Germany", "FUN.Spain",
-  #                          "FUN.Belgium", "FIN.Finland"))
+            max.date = floor(max(census.date, na.rm=TRUE))) 
 
 
 yrs_n <- census_info %>% 
@@ -330,7 +320,6 @@ yrs_n <- census_info %>%
   mutate(year = floor(min(census.date, na.rm=TRUE))) %>% ungroup() %>%
   group_by(db_country, census.n, year) %>%
   summarize(n = n())
-
 
 yrs %>% 
   arrange(country, database.code, desc(census.n)) %>%
@@ -446,21 +435,6 @@ tree0_status1 <- tree0 %>%
 dim(tree0)
 dim(tree0_status1)
 
-### CHECKS ----
-# Last run: Total of 4222 trees missing in the last census. See comments on database notes to A.
-# These are mainly plots that were not measured in the last census (?)
-# (a lot more in NSP, but not using that right now)
-n_status_NA <- sum(is.na(tree0_status1$tree.status1))
-warning(paste("Total of", n_status_NA, "trees missing in the last census. Plots not measured? These are removed."))
-
-table(tree0_status1$database.code, is.na(tree0_status1$tree.status1))
-
-tree0_status1 %>%
-  group_by(tmt.census.id) %>%
-  summarise(any_status1_NA = any(is.na(tree.status1)),
-            all_status1_NA = all(is.na(tree.status1)) ) %>%
-  filter(any_status1_NA & !all_status1_NA)
-
 # census_stats for harvested vs non-harvested trees
 census_stats_harvested <- tree0_status1 %>%
   filter(!is.na(tree.status1)) %>% # remove trees that were not measured in the latest census
@@ -526,44 +500,6 @@ census_stats_final <- census_stats_final %>%
            harvest_any & harvest_percent_stems == 1 ~ "ALL_CUT"),
            levels = c("NO_HARVEST", "PARTIAL_CUT", "ALL_CUT")) )
 
-
-### Checks ----
-
-# tmt.census.id is NA? Mainly NNL, these seem to be plots that are not measured in
-# census 7, but rows are created here through the 6th meas.
-# --> remove
-census_stats_final %>%
-  filter(is.na(tmt.census.id)) %>%
-  select(tmt.plot.id, tmt.census.id, tmt.census.id0)
-
-census_info %>% filter(tmt.plot.id == "NNL.11137")
-
-census_stats_final <- census_stats_final %>%
-  filter(!is.na(tmt.census.id))
-
-# NAs in census1 stats 
-# These are cases where all trees have died -- stats only calculated from living trees!
-# But: if regrowth after census0, these are not necessarily NA, even if the trees in census0 are dead.
-table(census_stats_final$database.code, is.na(census_stats_final$n_stems_obs))
-table(census_stats_final$n_stems_obs.DEAD == census_stats_final$n_stems_obs0,
-        is.na(census_stats_final$n_stems_obs))
-
-census_stats_final %>%
-  filter(n_stems_obs.DEAD == n_stems_obs0 & !is.na(n_stems_obs)) %>%
-  select(tmt.plot.id,  n_stems_obs.DEAD, n_stems_obs0, n_stems_obs) 
-
-tree %>% filter(tmt.plot.id == "FIN.1534054_3") %>%
-  select(tmt.plot.id, census.n, tmt.tree.id, tree.status) %>%
-  arrange(tmt.tree.id, census.n)
-  
-# + 401 NAs in census1 stats needing n.ha for Finland
-# these are most likely trees that are no longer part of sample plot in vmi12 -> n.ha is NA and everything that uses it is too
-# --> no need for action, these are currently not used anyway. If these are needed later, check the notes in the 0X_process_VMI_data.R script.
-table(census_stats_final$database.code, is.na(census_stats_final$d_mean_ht) & !is.na(census_stats_final$n_stems_obs))
-
-census_stats_final %>%
-  filter(is.na(d_mean_ht) & !is.na(n_stems_obs)) %>%
-  select(tmt.census.id, d_mean_ht, n_stems_obs)
 
 #proportion of harvested plots in all plots (latest census only)
 sum(census_stats_final$harvest_any, na.rm=TRUE) / nrow(census_stats_final)*100
@@ -843,7 +779,6 @@ if(any(is.na(census_stats_final$census.interval))) {
 
 dim(census_stats_final)
 
-
 ################################################################'
 ## 12. Final edits harvest + predictors ----
 ## 
@@ -855,7 +790,7 @@ dim(census_stats_final)
 census_stats_final <- census_stats_final %>%
   mutate(
     #predictors
-    non_native = factor(non_native, levels=c("native", "exotic", "outside-range")),
+    # non_native = factor(non_native, levels=c("native", "exotic", "outside-range")),
     ba0_m2 = ba_total0,
     d0_cm = d_mean_ht0/10,
     db_country = factor(paste(database.code, substr(country, 1, 3), sep="."))
@@ -904,9 +839,10 @@ head(area_rep_ger)
 
 ## Sweden, values from Jonas
 
-sweden_update <- read.csv2("./data/raw/Sweden_addition/Sweden_Census_Update_220208_to_Susanne.csv")
+# sweden_update_org <- read.csv2("./data/raw/Sweden_addition/Sweden_Census_Update_220208_to_Susanne.csv")
+sweden_update_org <- read.csv2("./data/raw/Sweden_addition/wetransfer_updated-csv-files_2022-02-25_0815/census_data_upd220225.csv")
 
-sweden_update <- sweden_update  %>%
+sweden_update <- sweden_update_org  %>%
   mutate(database.code = "NSW",
          Area.Exp.Factor..ha. = as.numeric(Area.Exp.Factor..ha.),
          plot.id = as.character(PlotID),
@@ -914,16 +850,15 @@ sweden_update <- sweden_update  %>%
            inv_year <= 2007 ~ 1,
            inv_year > 2007 & inv_year < 2013 ~ 2,
            inv_year > 2012 ~ 3))  %>%
-  select(database.code,ClusterID_census, plot.id, census.n, inv_year, County_ID,  Total.county.area..ha., Region_ID, Area.Exp.Factor..ha.) %>%
+  select(database.code,ClusterID_census, plot.id, census.n, inv_year, Area.Exp.Factor..ha.) %>%
   group_by(database.code, plot.id, inv_year) %>%
-  mutate(forest_area_repSWE = sum(Area.Exp.Factor..ha.)) %>%
+  mutate(forest_area_repSWE = sum(Area.Exp.Factor..ha.)/5) %>% #from Jonas: "Using n years of data the sum of AEF should be divided by n"
   select(!Area.Exp.Factor..ha.) %>%
   distinct()
   
 area_rep_swe <- sweden_update %>%
   ungroup() %>%
   select(database.code, plot.id, census.n, forest_area_repSWE)
-
 
 ## Other countries as forest_area/number of plots
 ## -  Belgium Walloon (FUN) & Flanders (NFL) separately, areas based on Table 2 in
@@ -973,7 +908,6 @@ nrow(census_stats_final_arearep) == nrow(census_stats_final)
 
 summary(census_stats_final_arearep$forest_area_repGER)
 
-
 # Take rep.area values from nearest neighbours for the NAs in the German data
 ger_NAs <- census_stats_final_arearep %>%
   filter(database.code == "NFG" & is.na(forest_area_repGER)) %>%
@@ -1019,7 +953,6 @@ census_stats_final %>%
 ################################################################'
 
 # Generate one row for each year
-# If harvest_any = TRUE, assign harvest to the first of the generated rows
 
 # census_stats_final <- readRDS("./data/processed/census_stats_final_21-02-22.rds")
 
@@ -1047,7 +980,6 @@ if (any(data_annual$mid_interval %% 1 > 0) ) {
   summary(data_annual$mid_interval %% 1)
   stop("Non-integer mid_interval values present, check where is the problem!")
 }
-
 
 # For post-harvest rows, use variables calculated without the harvested trees
 data_annual <- data_annual %>%

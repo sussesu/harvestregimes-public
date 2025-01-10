@@ -1,10 +1,17 @@
 ################################################################'
 ##
 ## Mapping harvest, figures to MS
+## Update 5/2024: include weights based on represented forest area per plot
 ##
 ################################################################'
 
-rm(list=ls())
+# rm(list=ls())
+
+##########################################'
+# run if working in Puhti!
+.libPaths(c("/projappl/project_2008416/project_rpackages_4.3/", .libPaths())) 
+libpath <- .libPaths()[1]
+##########################################'
 
 library(tidyverse)
 library(sf)
@@ -17,8 +24,8 @@ load("./outputs/basemaps_europe.RData")
 ## Set things ----
 
 # Read files
-data_annual <- readRDS("./data/processed/data_annual_22-08-23_RFready.rds")
-census_stats_final <- readRDS("./data/processed/census_stats_final_22-08-23_RFready.rds")
+data_annual <- readRDS("./data/processed/data_annual_24-05-24_RFready.rds")
+census_stats_final <- readRDS("./data/processed/census_stats_final_24-05-24_RFready.rds")
 
 # exclude data sets
 exclude_db <- c("FUN.Fin", "NFL.Bel", "NPO.Pol", "NPO2.Pol")
@@ -29,7 +36,12 @@ table(data_annual$database.code)
 dim(census_stats_final)
 dim(data_annual)
 
+# check weights
+# rep_area_weights
+# forest_area_rep
 
+summary(census_stats_final$rep_area_weights)
+summary(census_stats_final$forest_area_rep)
 
 # Filter thresholds - how many plots/harvest events required per grid cell
 
@@ -95,6 +107,7 @@ col_harvest <- viridis(4, direction = -1)[1:3]
 
 
 ### Lat/Lon + database points ----
+# edit: added weights based on represented forest area
 map_data_annual <- data_annual %>%
   mutate(lat = round(latitude),
          lon = round(longitude),
@@ -104,14 +117,8 @@ map_data_annual <- data_annual %>%
   group_by(lat, lon) %>%
   summarize(n_plots_annual = n(),
             n_obs = n_distinct(tmt.plot.id),
-            harvest_pros = sum(harvest_any)/n_plots_annual,
-            partial_pros = sum(harvest_3class == "PARTIAL_CUT")/n_plots_annual,
-            allcut_pros = sum(harvest_3class == "ALL_CUT")/n_plots_annual,
-            harvest_pros_0_25 = sum(harvest_intensity_class == "0_25", na.rm=TRUE)/n_plots_annual,
-            harvest_pros_25_50 = sum(harvest_intensity_class == "25_50", na.rm=TRUE)/n_plots_annual,
-            harvest_pros_50_75 = sum(harvest_intensity_class == "50_75", na.rm=TRUE)/n_plots_annual,
-            harvest_pros_75_100 = sum(harvest_intensity_class == "75_100", na.rm=TRUE)/n_plots_annual,
-            harvest_pros_100 = sum(harvest_percent_ba == 1, na.rm=TRUE)/n_plots_annual
+            harvest_pros_noWeight = sum(harvest_any)/n_plots_annual,
+            harvest_pros = sum(harvest_any * forest_area_rep)/sum(forest_area_rep)
   ) %>%
   filter(n_obs >= thold_nplot)
 
@@ -122,42 +129,54 @@ map_data_org <- census_stats_final %>%
          harvest_percent_stems_partial = ifelse(harvest_percent_stems == 1, NA, harvest_percent_stems),
          harvest_intensity_class = cut(harvest_percent_ba, 
                                        breaks=c(0, 0.25, 0.5, 0.75, 1),
-                                       labels=c("0_25", "25_50", "50_75", "75_100"))) %>%
+                                       labels=c("0_25", "25_50", "50_75", "75_100")),
+         forest_area_weights = rep_area_weights) %>%
   group_by(lat, lon) %>%
-  summarize(n_plots = n(),
+  dplyr::summarize(n_plots = n(),
             n_harvest = sum(harvest_any),
-            harvest_pros_allcut =  sum(harvest_3class == "ALL_CUT") / sum(harvest_any),
-            harvest_percent_ba_sd = sd(harvest_percent_ba * 100, na.rm=TRUE),
-            harvest_percent_ba_SEM = harvest_percent_ba_sd/sqrt(n_plots),
-            harvest_percent_ba_mean = mean(harvest_percent_ba * 100, na.rm=TRUE),
-            intensity_ba_partial = mean(harvest_percent_ba_partial * 100, na.rm=TRUE),
-            intensity_stems_partial = mean(harvest_percent_stems_partial, na.rm=TRUE),
-            harvest_p_0_25 = sum(harvest_intensity_class == "0_25", na.rm=TRUE)/n_harvest,
-            harvest_p_25_50 = sum(harvest_intensity_class == "25_50", na.rm=TRUE)/n_harvest,
-            harvest_p_50_75 = sum(harvest_intensity_class == "50_75", na.rm=TRUE)/n_harvest,
-            harvest_p_75_100 = sum(harvest_intensity_class == "75_100", na.rm=TRUE)/n_harvest,
-            harvest_p_100 = sum(harvest_percent_ba == 1, na.rm=TRUE)/n_harvest,
+            n_countries = n_distinct(country),
+            
+            harvest_percent_ba_sd_noWeight = sd(harvest_percent_ba * 100, na.rm=TRUE),
+            harvest_percent_ba_SEM_noWeight = harvest_percent_ba_sd_noWeight/sqrt(n_plots),
+            harvest_percent_ba_mean_noWeight = mean(harvest_percent_ba * 100, na.rm=TRUE),
+            harvest_p_0_25_noWeight = sum(harvest_intensity_class == "0_25", na.rm=TRUE)/n_harvest,
+            harvest_p_25_50_noWeight = sum(harvest_intensity_class == "25_50", na.rm=TRUE)/n_harvest,
+            harvest_p_50_75_noWeight = sum(harvest_intensity_class == "50_75", na.rm=TRUE)/n_harvest,
+            harvest_p_75_100_noWeight = sum(harvest_intensity_class == "75_100", na.rm=TRUE)/n_harvest,
+            harvest_p_100_noWeight = sum(harvest_percent_ba == 1, na.rm=TRUE)/n_harvest,
             ba0_mean = mean(ba0_m2),
             ba0_max = max(ba0_m2),
             ba_harvest_mean = mean(ba_total.HARVEST, na.rm=TRUE),
             d0_mean = mean(d0_cm),
             d_harvest_mean = mean(d_mean_ht.HARVEST, na.rm=TRUE),
             d_diff_mean = mean(harvest_size_diff, na.rm=TRUE),
-            sp_conifer_pros = (sum(conifer)/n())*100,
-            sp_exotic_pros = (sum(non_native == "exotic")/n())*100,
-            sp_outsiderange_pros = (sum(non_native == "outside-range")/n())*100,
             stems_perc_HARVEST = sum(n_stems_ha.HARVEST/ census_interval, na.rm = TRUE) / sum(n_stems_ha0),
             ba_perc_HARVEST = sum(ba_total.HARVEST / census_interval, na.rm=TRUE) / sum(ba_total0),
-            # stems_perc_NATDEAD = sum(n_stems_ha.NATDEAD / census_interval, na.rm=TRUE) / sum(n_stems_ha0),
-            # ba_perc_NATDEAD = sum(ba_total.NATDEAD / census_interval, na.rm=TRUE) / sum(ba_total0),
-            sum_stems_annual_ALLCUT = sum(ifelse(harvest_3class == "ALL_CUT", n_stems_ha.HARVEST / census_interval, 0)),
-            sum_stems_annual_PARTIALCUT = sum(ifelse(harvest_3class == "PARTIAL_CUT", n_stems_ha.HARVEST / census_interval, 0)),
-            stems_perc_ALLCUT = sum_stems_annual_ALLCUT / sum(n_stems_ha0),
-            stems_perc_PARTIALCUT = sum_stems_annual_PARTIALCUT / sum(n_stems_ha0),
-            sum_ba_annual_ALLCUT = sum(ifelse(harvest_3class == "ALL_CUT", ba_total.HARVEST / census_interval, 0)),
-            sum_ba_annual_PARTIALCUT = sum(ifelse(harvest_3class == "PARTIAL_CUT", ba_total.HARVEST / census_interval, 0)),
-            ba_perc_ALLCUT = sum_ba_annual_ALLCUT / sum(ba_total0),
-            ba_perc_PARTIALCUT = sum_ba_annual_PARTIALCUT / sum(ba_total0)) %>%
+            
+            
+            harvest_percent_ba_var = ifelse(n_harvest > 1,
+                                            Hmisc::wtd.var(harvest_percent_ba * 100, weights = forest_area_weights, normwt=TRUE, na.rm=TRUE),
+                                            NA),
+            harvest_percent_ba_sd = sqrt(harvest_percent_ba_var),
+            harvest_percent_ba_SEM = harvest_percent_ba_sd/n_harvest, # following https://stats.stackexchange.com/a/615418
+            harvest_percent_ba_mean = Hmisc::wtd.mean(harvest_percent_ba * 100, weights = forest_area_weights, na.rm=TRUE),
+            intensity_ba_partial = Hmisc::wtd.mean(harvest_percent_ba_partial * 100, weights = forest_area_weights, na.rm=TRUE),
+            intensity_stems_partial = Hmisc::wtd.mean(harvest_percent_stems_partial, weights = forest_area_weights, na.rm=TRUE),
+            
+            harvest_p_0_25 = sum((harvest_intensity_class == "0_25") *forest_area_weights, na.rm=TRUE)/sum(harvest_any * forest_area_weights),
+            harvest_p_25_50 = sum((harvest_intensity_class == "25_50") *forest_area_weights, na.rm=TRUE)/sum(harvest_any * forest_area_weights),
+            harvest_p_50_75 = sum((harvest_intensity_class == "50_75") *forest_area_weights, na.rm=TRUE)/sum(harvest_any * forest_area_weights),
+            harvest_p_75_100 = sum((harvest_intensity_class == "75_100") *forest_area_weights, na.rm=TRUE)/sum(harvest_any * forest_area_weights),
+            harvest_p_100 = sum((harvest_percent_ba == 1) *forest_area_weights, na.rm=TRUE)/sum(harvest_any * forest_area_weights),
+            ba0_mean = Hmisc::wtd.mean(ba0_m2, weights = forest_area_weights),
+            ba0_max = max(ba0_m2),
+            ba_harvest_mean = Hmisc::wtd.mean(ba_total.HARVEST, na.rm=TRUE, weights = forest_area_weights),
+            d0_mean = Hmisc::wtd.mean(d0_cm, weights = forest_area_weights),
+            d_harvest_mean = Hmisc::wtd.mean(d_mean_ht.HARVEST, na.rm=TRUE, weights = forest_area_weights),
+            d_diff_mean = Hmisc::wtd.mean(harvest_size_diff, na.rm=TRUE, weights = forest_area_weights),
+            stems_perc_HARVEST = sum((n_stems_ha.HARVEST*forest_area_weights)/ census_interval, na.rm = TRUE) / sum(n_stems_ha0*forest_area_weights),
+            ba_perc_HARVEST = sum((ba_total.HARVEST*forest_area_weights) / census_interval, na.rm=TRUE) / sum(ba_total0*forest_area_weights)
+            ) %>%
   filter(n_plots >= thold_nplot)
 
 idx_few_harvest <- map_data_org$n_harvest < thold_harvest
@@ -170,6 +189,59 @@ map_data_org
 
 map_data_merge <- map_data_annual %>%
   left_join(map_data_org)
+
+#### Check effects from weights ----
+
+# check sd NAs - these are ones where sum(weights) < 1 ??
+map_data_merge %>%
+  filter(is.na(harvest_percent_ba_sd)) %>%
+  select(lat, lon, n_obs, n_harvest)
+
+census_stats_final %>%
+  filter(round(latitude) == 55 & round(longitude) == 14 & harvest_any) %>% 
+  select(tmt.plot.id, harvest_any, harvest_percent_ba, rep_area_weights)
+
+# check weighted vs. non-weighted values
+ggplot(map_data_merge, aes(harvest_pros_noWeight, harvest_pros,
+                           col = n_countries == 1)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+ggplot(map_data_merge, aes(harvest_percent_ba_mean_noWeight, harvest_percent_ba_mean, 
+                           col = n_countries == 1)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+ggplot(map_data_merge, aes(harvest_percent_ba_SEM_noWeight, harvest_percent_ba_SEM, 
+                           col = n_countries == 1)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+# harvest intensity classes
+ggplot(map_data_merge, aes(harvest_p_0_25_noWeight, harvest_p_0_25 ,
+                           col = n_countries == 1)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+ggplot(map_data_merge, aes(harvest_p_25_50_noWeight, harvest_p_25_50,
+                           col = n_countries == 1)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+ggplot(map_data_merge, aes(harvest_p_50_75_noWeight, harvest_p_50_75,
+                           col = n_countries == 1)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+ggplot(map_data_merge, aes(harvest_p_75_100_noWeight, harvest_p_75_100,
+                           col = n_countries == 1)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0)
+
+# ggplot(map_data_merge, aes(n_harvest, sum_harvest_weights, 
+#                            col = n_countries == 1)) +
+#   geom_point() +
+#   geom_abline(slope = 1, intercept = 0)
 
 
 ### Map - projected ----
@@ -331,18 +403,19 @@ gg_harv_obs <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(harves
 # Total %BA harvested in grid cell
 
 map_guide_totalBA <- map_guide
-map_guide_totalBA$title <- "%BA harvested per year"
+map_guide_totalBA$title <- "%BA harvested"
 
 gg_harvest_totalBA <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(harvest_pros)), 
                                              aes(fill=ba_perc_HARVEST*100), 
                                              alpha=.7, lwd = 0, na.rm=TRUE) +
   scale_fill_viridis(direction=-1, na.value = "white", 
-                     option="viridis", guide = map_guide_totalBA) +
+                     option= "mako", #"viridis", 
+                     guide = map_guide_totalBA) +
   coord_sf(ylim = c(map_extent$min_y, map_extent$max_y),
            xlim = c(map_extent$min_x, map_extent$max_x)) +
   # annotate(geom = 'text', label = 'A. Total intensity', x = -Inf, y = Inf, hjust = 0, vjust = 1, size=6) +
   map_theme +
-  ggtitle("A. Overall harvest intensity")
+  ggtitle("A. Total harvest rate")
 
 # % harvested plots (All)
 map_guide_FREQ <- map_guide
@@ -371,7 +444,7 @@ gg_harvest_FREQ2 <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(h
   # annotate(geom = 'text', label = 'B. Frequency', x = -Inf, y = Inf, hjust = 0, vjust = 1, size=6) +
   map_theme +
   # theme(axis.text.y = element_blank()) +
-  ggtitle("A. Frequency of harvest events")
+  ggtitle("B. Frequency of harvest events")
 
 
 # Harvest intensity (%BA harvested) - ALL PLOTS (incl. ALL_CUT)
@@ -400,16 +473,16 @@ gg_harvest_INT2 <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(ha
   # annotate(geom = 'text', label = 'C. Intensity', x = -Inf, y = Inf, hjust = 0, vjust = 1, size=6) +
   map_theme +
   theme(axis.text.y = element_blank()) +
-  ggtitle("B. Intensity of harvest events")
+  ggtitle("C. Intensity of harvest events")
 
 
-# gg_harvest_totalBA + gg_harvest_FREQ + gg_harvest_INT
+gg_harvest_totalBA + gg_harvest_FREQ2 + gg_harvest_INT
 
 
-### SEM of mean intensity ----
+### SEM of mean intensity 
 
-gg_IntSEM <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(harvest_pros)), 
-                                      aes(fill=harvest_percent_ba_SEM), 
+gg_IntSEM <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(harvest_pros)),
+                                      aes(fill=harvest_percent_ba_SEM),
                                       alpha=.7, lwd = 0, na.rm=TRUE) +
   scale_fill_viridis(direction=-1, discrete=FALSE, guide =  guide_coloursteps(
     title="SEM",
@@ -426,6 +499,27 @@ gg_IntSEM <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(harvest_
   ggtitle("St. error of the mean harvest intensity")
 
 gg_IntSEM
+
+### St.dev of mean intensity 
+
+gg_IntStDev <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(harvest_pros)),
+                                    aes(fill=harvest_percent_ba_sd),
+                                    alpha=.7, lwd = 0, na.rm=TRUE) +
+  scale_fill_viridis(direction=-1, discrete=FALSE, guide =  guide_coloursteps(
+    title="St.dev.",
+    direction = "horizontal",
+    title.position = "left",
+    # label.hjust = 1,
+    label.position = "bottom",
+    label.theme = element_text(angle = 0, size=8),
+    barwidth = 10, barheight = 0.5),
+    option="inferno") +
+  coord_sf(ylim = c(map_extent$min_y, map_extent$max_y),
+           xlim = c(map_extent$min_x, map_extent$max_x)) +
+  map_theme +
+  ggtitle("St. deviation of harvest intensity")
+
+gg_IntStDev
 
 ### Freq by intensity classes -----
 
@@ -508,19 +602,17 @@ gg_harvest_100 <- basemap_proj + geom_sf(data=grid_harvest %>% filter(!is.na(har
         legend.position = "right") +
   ggtitle("E. 100%")
 
-# gg_harvest_0_25 + gg_harvest_25_50 + gg_harvest_50_75 + gg_harvest_75_100 + gg_harvest_100 +
-#   plot_layout(ncol = 5, guides = "collect") & theme(legend.position = 'bottom')
-
-# gg_harvest_0_25 + gg_harvest_25_50 + gg_harvest_50_75 + gg_harvest_75_100 +
-#   plot_layout(ncol = 5, guides = "collect") 
 
 # Write to files ----
 
+## Fig. 2 ---- 
 # print to file - harvest maps
 png(paste0("./outputs/figures/MS/harvest_maps_MS_", fl_date, ".png"),
     height=5.5, width=10.5, unit="in", res=300)
 
-gg_harvest_totalBA + gg_harvest_FREQ + gg_harvest_INT
+gg_harvest_totalBA +
+  gg_harvest_FREQ2 + 
+  gg_harvest_INT2
 
 dev.off()
 
@@ -528,26 +620,22 @@ dev.off()
 png(paste0("./outputs/figures/MS/harvest_event2_maps_MS_", fl_date, ".png"),
     height=5.5, width=8, unit="in", res=300)
 
-gg_harvest_FREQ2 + 
+  gg_harvest_FREQ2 + 
   gg_harvest_INT2
 
 dev.off()
 
+## Fig. 4----
 # maps by intensity
-
 png(paste0("./outputs/figures/MS/harvest_maps_byINT2_MS_", fl_date, ".png"),
     height=4, width=10.5, unit="in", res=300)
 
 gg_harvest_0_25 + gg_harvest_25_50 + gg_harvest_50_75 + gg_harvest_75_100 +
   plot_layout(ncol = 4, guides = "collect") 
 
-# gg_harvest_0_25 + gg_harvest_25_50 + gg_harvest_50_75 + gg_harvest_75_100 + gg_harvest_100 +
-#   plot_layout(ncol = 5, guides = "collect") & theme(legend.position = 'bottom')
-
 dev.off()
 
 # print to file - number of observations (to supplement)
-
 png(paste0("./outputs/figures/MS/harvest_maps_nObs_", fl_date, ".png"),
     height=5, width=10.5, unit="in", res=300)
 
@@ -555,25 +643,24 @@ gg_obs + gg_harv_obs
 
 dev.off()
 
-# n obs + SEM
-png(paste0("./outputs/figures/MS/harvest_maps_nObs_SEM_", fl_date, ".png"),
+## Fig. S3 (supplement) ----
+# n obs + St.dev
+png(paste0("./outputs/figures/MS/harvest_maps_nObs_StDev_", fl_date, ".png"),
     height=5, width=10.5, unit="in", res=300)
 
 gg_obs + 
   (gg_harv_obs + theme(axis.text.y = element_blank())) +
-  (gg_IntSEM + theme(axis.text.y = element_blank()))
+  (gg_IntStDev + theme(axis.text.y = element_blank()))
 
 dev.off()
 
 # correlation plots
-
 png(paste0("./outputs/figures/MS/harvest_grid_correlations_", fl_date, ".png"),
     height=3, width=8.5, unit="in", res=300)
 cor_gg1 + cor_gg2 + cor_gg3
 dev.off()
 
 # write grid to file
-
 grid_out_wgs84 <- data.frame(id = 1:length(grid_annual)) %>%
   mutate(geometry = grid_annual) %>%
   st_as_sf(crs="EPSG:4326") 
@@ -585,5 +672,5 @@ grid_out_proj <- grid_harvest %>%
 ggplot(grid_out_wgs84) + geom_sf()
 ggplot(grid_out_proj) + geom_sf()
 
-st_write(grid_out_wgs84, "./data/processed/harvest_grids/grid_1degree_wgs84.gpkg")
-st_write(grid_out_proj, "./data/processed/harvest_grids/grid_1degree_projected.gpkg")
+st_write(grid_out_wgs84, paste0("./data/processed/harvest_grids/grid_1degree_wgs84_weights_", fl_date, ".gpkg") )
+st_write(grid_out_proj, paste0("./data/processed/harvest_grids/grid_1degree_projected_weights_", fl_date, ".gpkg") )

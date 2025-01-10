@@ -28,10 +28,10 @@ set.seed(456)
 # Set stuff ---------------------------------------------------------------
 
 # input file for data?
-input_fl <- "./data/processed/census_stats_final_22-08-23_RFready.rds"
+input_fl <- "./data/processed/census_stats_final_24-05-24_RFready.rds"
 
 # additional identifier for output files?
-fileID_add <- ""
+fileID_add <- "newWeights_"
 
 # Include only partial harvests?
 only_partial <- FALSE

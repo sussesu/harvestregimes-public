@@ -30,10 +30,10 @@ set.seed(456)
 # Set stuff ---------------------------------------------------------------
 
 # input file for data?
-input_fl <- "./data/processed/data_annual_22-08-23_RFready.rds"
+input_fl <- "./data/processed/data_annual_06-08-24_RFready.rds"
 
 # additional identifier for output files? (end with "-" for neat filenames...)
-fileID_add <- "noBalancingCV_"
+fileID_add <- "newWeights_"
 
 # tune hyperparameters or run with defaults?
 tuneHP <- FALSE
@@ -42,7 +42,7 @@ tuneHP <- FALSE
 run_subsample <- FALSE
 n_subsample <- 1e4
 
-run_fullmodel <- FALSE # fit model with full data (i.e., not only CV)?
+run_fullmodel <- TRUE # fit model with full data (i.e., not only CV)?
 run_CV <- TRUE # run cross-validation with spatial (+ nonspatial folds - these now commented out)
 
 # balance harvest and non-harvest classes?
@@ -300,7 +300,7 @@ if(class_balancing) {
   
   table(data_ranger$harvest01)
 } else {
-  data_ranger <- task_data_nsp
+  data_ranger <- task_data_nsp %>% select(any_of(c(target_var, preds_rf)))
 }
 
 if(run_fullmodel) {
