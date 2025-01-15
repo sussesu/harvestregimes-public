@@ -2,6 +2,8 @@
 
 Susanne Suvanto
 
+[![DOI](https://zenodo.org/badge/725503730.svg)](https://doi.org/10.5281/zenodo.14650651)
+
 Codes for running the analysis for the 'Understanding Europe's Forest Harvesting Regimes' manuscript, which has been accepted for publication in the journal Earth's Future (details updated here when available). The latest update of this repository (10/1/2025) contains the updates to the codes during the review process, now corresponding to the results presented in the accepted version of the paper.
 
 Preprint of the manuscript available here: https://eartharxiv.org/repository/view/5858/ (pre-review version).
